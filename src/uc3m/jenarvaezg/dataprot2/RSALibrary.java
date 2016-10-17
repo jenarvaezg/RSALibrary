@@ -1,18 +1,21 @@
 package uc3m.jenarvaezg.dataprot2;
 
+import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
-import java.io.ObjectOutputStream;
 import java.security.Key;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.Signature;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 
 import javax.crypto.Cipher;
 import javax.xml.bind.DatatypeConverter;
@@ -21,15 +24,67 @@ import javax.xml.bind.DatatypeConverter;
 public class RSALibrary {
 
   // String to hold name of the encryption algorithm.
-  public static final String ALGORITHM = "RSA";
+  public final String ALGORITHM = "RSA";
 
   //String to hold the name of the private key file.
-  public static final String PRIVATE_KEY_FILE = "./private.key";
+  public final String PRIVATE_KEY_FILE = "./private.key";
 
   // String to hold name of the public key file.
-  public static final String PUBLIC_KEY_FILE = "./public.key";
+  public final String PUBLIC_KEY_FILE = "./public.key";
   
   
+  
+  public Key getKey(String path) throws Exception{
+	  Key key = null;
+	  Boolean isPublic = false;
+	  String base64encoded = "";
+	  String line;
+	  
+	  BufferedReader reader = new BufferedReader(new FileReader(new File(path)));
+	  String header = reader.readLine();
+	  
+	  if("-----BEGIN PUBLIC KEY-----".equals(header)){
+		  isPublic = true;
+	  }else if(!"-----BEGIN RSA PRIVATE KEY-----".equals(header)){
+		  reader.close();
+		  throw new Exception("Key file header wrong: " + path + " got: " + header);
+	  }
+	  
+	  try{
+		  for(line = reader.readLine();; line = reader.readLine()){
+			  
+			  base64encoded += line;
+			  if(line.length() != 64){
+				 line = reader.readLine();
+				 break;
+			  }
+		  }
+	  }catch(IOException e){
+		  e.printStackTrace();
+		  throw new Exception("Key file missing footer");
+	  }finally{
+		  reader.close();
+	  }
+	  if((isPublic && !"-----END PUBLIC KEY-----".equals(line)) || (!isPublic && !"-----END RSA PRIVATE KEY-----".equals(line))){
+		  throw new Exception("Key file has wrong footer: " + path);
+	  }
+	  
+	  
+	  byte[] keyBytes = DatatypeConverter.parseBase64Binary(base64encoded);
+	
+	  if(isPublic){
+		  X509EncodedKeySpec keySpec = new X509EncodedKeySpec(keyBytes);
+		  KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+		  key = keyFactory.generatePublic(keySpec);
+	  }else{
+		  PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
+		  KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+		  key = keyFactory.generatePrivate(keySpec);
+	  } 
+	  
+	  
+	  return key;
+  }
   
   private void saveKey(Key key, String path) throws IOException{
 	  byte[] encoded = key.getEncoded();
